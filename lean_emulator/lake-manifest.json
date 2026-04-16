@@ -24,7 +24,7 @@
    "manifestFile": "lake-manifest.json",
    "inherited": true,
    "dir": "../build/model/Lean_RV64D_executable//../../../../lean-sail",
-   "configFile": "lakefile.toml"},
+   "configFile": "lakefile.lean"},
   {"url": "https://github.com/leanprover/lean4-cli.git",
    "type": "git",
    "subDir": null,
