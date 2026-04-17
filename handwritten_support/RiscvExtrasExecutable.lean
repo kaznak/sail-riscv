@@ -31,10 +31,71 @@ def plat_term_write {α} : α → SailM Unit := λ _ => panic "TODO: plat_term_w
 def plat_term_read : Unit → SailM String := λ _ => panic "TODO: plat_term_read"
 
 -- Reservations
-def load_reservation : Arch.pa → Nat → SailM Unit := λ _ => panic "TODO: load_reservation"
-def match_reservation : Arch.pa → Bool := λ _ => panic "TODO: match_reservation"
-def cancel_reservation : Unit → SailM Unit := λ _ => dbg_trace "TODO: cancel_reservation"; return ()
-def valid_reservation : Unit → Bool := λ _ => false
+-- Implemented using IO.Ref for global mutable state, matching the C++ ModelImpl approach.
+-- SailM is EStateM-based (not IO), so we use @[implemented_by] to bridge unsafe IO.
+-- `match_reservation` and `valid_reservation` are declared `pure` in Sail.
+
+end Effectful
+end defs
+
+private structure ReservationState where
+  valid : Bool := false
+  addr  : Nat := 0
+  deriving Inhabited
+
+-- Reservation set granularity mask: align to 8-byte boundaries (matching C++ impl).
+private def reservationAddrMask : Nat := 0xFFFFFFFFFFFFFFF8
+
+private builtin_initialize reservationRef : IO.Ref ReservationState ←
+  IO.mkRef {}
+
+private unsafe def unsafeLoadReservation (addrNat : Nat) (_width : Nat) : Unit :=
+  let addr := addrNat &&& reservationAddrMask
+  unsafeBaseIO (reservationRef.set { valid := true, addr := addr })
+
+private unsafe def unsafeMatchReservation (addrNat : Nat) : Bool :=
+  let addr := addrNat &&& reservationAddrMask
+  let st := unsafeBaseIO reservationRef.get
+  st.valid && st.addr == addr
+
+private unsafe def unsafeCancelReservation : Unit :=
+  unsafeBaseIO (reservationRef.modify fun st => { st with valid := false })
+
+private unsafe def unsafeValidReservation : Bool :=
+  let st := unsafeBaseIO reservationRef.get
+  st.valid
+
+-- Safe stubs (never actually called at runtime due to @[implemented_by])
+private def safeLoadReservation (_addrNat : Nat) (_width : Nat) : Unit := ()
+private def safeMatchReservation (_addrNat : Nat) : Bool := false
+private def safeCancelReservation : Unit := ()
+private def safeValidReservation : Bool := false
+
+@[implemented_by unsafeLoadReservation]
+private def loadReservationImpl (addrNat : Nat) (width : Nat) : Unit := safeLoadReservation addrNat width
+@[implemented_by unsafeMatchReservation]
+private def matchReservationImpl (addrNat : Nat) : Bool := safeMatchReservation addrNat
+@[implemented_by unsafeCancelReservation]
+private def cancelReservationImpl : Unit := safeCancelReservation
+@[implemented_by unsafeValidReservation]
+private def validReservationImpl : Bool := safeValidReservation
+
+section defs
+variable [Arch]
+section Effectful
+variable {Register : Type} {RegisterType : Register → Type} [DecidableEq Register] [Hashable Register]
+
+def load_reservation (pa : physaddrbits) (width : Nat) : SailM Unit :=
+  pure (loadReservationImpl pa.toNat width)
+
+def match_reservation (pa : physaddrbits) : Bool :=
+  matchReservationImpl pa.toNat
+
+def cancel_reservation (_u : Unit) : SailM Unit :=
+  pure cancelReservationImpl
+
+def valid_reservation (_u : Unit) : Bool :=
+  validReservationImpl
 
 def get_16_random_bits : Unit → SailM (BitVec 16) := λ _ => panic "TODO: get_16_random_bits"
 def sys_enable_experimental_extensions : Unit → Bool := λ _ => false
