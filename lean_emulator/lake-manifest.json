@@ -7,7 +7,7 @@
    "manifestFile": "lake-manifest.json",
    "inherited": false,
    "dir": "../build/model/Lean_RV64D_executable/",
-   "configFile": "lakefile.toml"},
+   "configFile": "lakefile.lean"},
   {"url": "https://github.com/GaloisInc/ELFSage.git",
    "type": "git",
    "subDir": null,
